@@ -1,3 +1,6 @@
+import * as fs from "node:fs/promises";
+import { isPathAllowed } from "./helpers.js";
+
 const getTime = () => {
   const date = new Date().toTimeString();
   return String(date);
@@ -27,13 +30,25 @@ const getWeather = async ({ lat, lng }) => {
   }
 };
 
-// Example call for New York coordinates (40.71, -74.00)
-// getWeather(40.71, -74.0);
+const listDirectory = async ({ dirPath }) => {
+  return isPathAllowed(dirPath, async () => {
+    const files = await fs.readdir(dirPath, { withFileTypes: true });
+    return JSON.stringify(
+      files.map((f) => ({ name: f.name, isDirectory: f.isDirectory() })),
+    );
+  });
+};
+
+const getCurrentDirectory = () => {
+  return process.cwd();
+};
 
 // this is where the model can call the tool it knows from.
 export const tool_implementations = {
   get_time: getTime,
   get_weather: getWeather,
+  list_directory: listDirectory,
+  get_current_dir: getCurrentDirectory,
 };
 
 export const available_tools = [
@@ -66,6 +81,33 @@ export const available_tools = [
         },
       },
       required: ["lat", "lng"],
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_directory",
+      description: "A tool used to fetch the content of a directory.",
+      parameters: {
+        type: "object",
+        properties: {
+          dirPath: {
+            type: "string",
+            description:
+              "path of the directory you're trying to list, can be relative or absolute, but preffered if it is absolute.",
+          },
+        },
+        required: ["dirPath"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_current_dir",
+      description: "A tool used to get the current working directory.",
+      parameters: {},
+      required: [],
     },
   },
 ];
