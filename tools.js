@@ -78,40 +78,35 @@ const searchFiles = async ({ pattern }) => {
 const writeAFile = async ({ content, filePath }) => {
   try {
     return isPathAllowed(filePath, async () => {
-      const writtenFile = await fs.writeFile(filePath, content);
+      await fs.writeFile(filePath, content);
+      return "File written successfully!";
     });
   } catch (error) {
-    console.log("error", error);
-    JSON.stringify(error);
+    return JSON.stringify(error);
   }
 };
 
 const createFolder = async ({ folderPath }) => {
   try {
     return isPathAllowed(folderPath, async () => {
-      const createdFolder = await fs.mkdir(folderPath, { recursive: true });
-      return createdFolder;
+      await fs.mkdir(folderPath, { recursive: true });
+      return "Folder created successfully!";
     });
   } catch (error) {
-    console.log("error", error);
-    JSON.stringify(error);
+    return JSON.stringify(error);
   }
 };
 
 const modifyFileContent = async ({ filePath, oldContent, newContent }) => {
   try {
-    // 1. Read existing content
-    const data = await fs.readFile(filePath, "utf8");
-
-    // 2. Modify the content (e.g., replace a word)
-    const updatedData = data.replaceAll(oldContent, newContent);
-
-    // 3. Write back to the file
-    await fs.writeFile(filePath, updatedData, "utf8");
-    console.log("File content updated successfully!");
+    return isPathAllowed(filePath, async () => {
+      const data = await fs.readFile(filePath, "utf8");
+      const updatedData = data.replaceAll(oldContent, newContent);
+      await fs.writeFile(filePath, updatedData, "utf8");
+      return "File content updated successfully!";
+    });
   } catch (error) {
-    console.log("error", error);
-    console.error("Error updating file:", error);
+    return JSON.stringify(error);
   }
 };
 
@@ -133,45 +128,46 @@ export const available_tools = [
     type: "function",
     function: {
       name: "get_time",
-      description: "A tool used to fetch the current time.",
-      caller: getTime(), // no need to include because this is a schema for the model to understand the tool.
-      parameters: {},
-      required: [],
+      description:
+        "Returns the current local system time as a string, e.g. '14:32:07 GMT+0530'. Takes no arguments.",
+      parameters: { type: "object", properties: {} },
     },
   },
   {
     type: "function",
     function: {
       name: "get_weather",
-      description: "A tool used to fetch the weather for given coords.",
+      description:
+        "Fetches current weather conditions for a given latitude/longitude. Returns JSON with temp and feelsLike (°C), humidity (%), wind (km/h), precipitation (mm), and weatherCode (WMO weather code). Does not accept city names - resolve those to coordinates yourself first.",
       parameters: {
         type: "object",
         properties: {
           lat: {
-            type: "integer",
-            description: "The latitude to get the weather information for.",
+            type: "number",
+            description: "Latitude in decimal degrees, e.g. 23.0225.",
           },
           lng: {
-            type: "integer",
-            description: "The longitude to get the weather information for.",
+            type: "number",
+            description: "Longitude in decimal degrees, e.g. 72.5714.",
           },
         },
+        required: ["lat", "lng"],
       },
-      required: ["lat", "lng"],
     },
   },
   {
     type: "function",
     function: {
       name: "list_directory",
-      description: "A tool used to fetch the content of a directory.",
+      description:
+        "Lists the immediate contents of a directory (not recursive). Returns JSON array of {name, isDirectory}. Only paths inside the .agent_workspace sandbox are allowed.",
       parameters: {
         type: "object",
         properties: {
           dirPath: {
             type: "string",
             description:
-              "path of the directory you're trying to list, can be relative or absolute, but preffered if it is absolute.",
+              "Path of the directory to list. Absolute paths are preferred over relative ones.",
           },
         },
         required: ["dirPath"],
@@ -182,23 +178,24 @@ export const available_tools = [
     type: "function",
     function: {
       name: "get_current_dir",
-      description: "A tool used to get the current working directory.",
-      parameters: {},
-      required: [],
+      description:
+        "Returns the absolute path of the process's current working directory. Takes no arguments. Note this is not necessarily inside the .agent_workspace sandbox - it's just where the process was launched from.",
+      parameters: { type: "object", properties: {} },
     },
   },
   {
     type: "function",
     function: {
       name: "read_file",
-      description: "A tool used to read the contents of a file.",
+      description:
+        "Reads and returns the full UTF-8 text contents of a file. Fails if the path is a directory or outside the .agent_workspace sandbox.",
       parameters: {
         type: "object",
         properties: {
           filePath: {
             type: "string",
             description:
-              "path of the file you're trying to read, can be relative or absolute, but preffered if it is absolute.",
+              "Path of the file to read. Absolute paths are preferred over relative ones.",
           },
         },
         required: ["filePath"],
@@ -210,14 +207,14 @@ export const available_tools = [
     function: {
       name: "search_files",
       description:
-        "A tool used to search files using a pattern. Example: D:\\projs\\agentic-loop\\*.txt OR D:\\projs\\agentic-loop\\notes.txt",
+        "Finds files matching a glob pattern and returns their paths as a JSON array. Only matches within the .agent_workspace sandbox. Example patterns: 'D:\\projs\\agentic-loop\\.agent_workspace\\*.txt' or '**/*.js'.",
       parameters: {
         type: "object",
         properties: {
           pattern: {
             type: "string",
             description:
-              "a glob pattern of the file you're trying to search, can be relative or absolute, but preffered if it is absolute.",
+              "Glob pattern to match files against. Absolute patterns are preferred over relative ones.",
           },
         },
         required: ["pattern"],
@@ -228,18 +225,19 @@ export const available_tools = [
     type: "function",
     function: {
       name: "write_file",
-      description: "A tool used to write a new file in a directory.",
+      description:
+        "Creates a new file with the given content, or overwrites it completely if it already exists. Use edit_file instead if you only want to change part of an existing file. Only paths inside the .agent_workspace sandbox are allowed.",
       parameters: {
         type: "object",
         properties: {
           content: {
             type: "string",
-            description: "The content that is to be written in the file.",
+            description: "The full text content to write into the file.",
           },
           filePath: {
             type: "string",
             description:
-              "The path of the file name to write to, it shoul contain the path along with he desired file name. Eg: D:\\projs\\agentic-loop\\test.txt",
+              "Full path including the desired file name, e.g. 'D:\\projs\\agentic-loop\\.agent_workspace\\test.txt'.",
           },
         },
         required: ["content", "filePath"],
@@ -250,14 +248,15 @@ export const available_tools = [
     type: "function",
     function: {
       name: "create_folder",
-      description: "A tool used to create a new folder in the directory.",
+      description:
+        "Creates a new folder, including any missing parent folders along the way (like mkdir -p). No error if the folder already exists. Only paths inside the .agent_workspace sandbox are allowed.",
       parameters: {
         type: "object",
         properties: {
           folderPath: {
             type: "string",
             description:
-              "The path along with the desired folder name to create. Eg: D:\\projs\\agentic-loop\\test_folder. This tool can create folders recursively inside the one you created at the very first.",
+              "Full path including the desired folder name, e.g. 'D:\\projs\\agentic-loop\\.agent_workspace\\test_folder'.",
           },
         },
         required: ["folderPath"],
@@ -268,24 +267,25 @@ export const available_tools = [
     type: "function",
     function: {
       name: "edit_file",
-      description: "A tool used to edit contents of an existing file.",
+      description:
+        "Edits an existing file by replacing every exact occurrence of oldContent with newContent (like find-and-replace, not a diff/patch). The file must already exist. Only paths inside the .agent_workspace sandbox are allowed. Prefer this over write_file when you only want to change part of a file.",
       parameters: {
         type: "object",
         properties: {
           filePath: {
             type: "string",
             description:
-              "The path of the file you're trying to edit, can be relative or absolute, but preffered if it is absolute.",
+              "Path of the file to edit. Absolute paths are preferred over relative ones.",
           },
           oldContent: {
             type: "string",
             description:
-              "The old content taken from the file that you wish to replace.",
+              "The exact existing text to find and replace. Must match the file's content verbatim (including whitespace) - read the file first if unsure.",
           },
           newContent: {
             type: "string",
             description:
-              "The new content from you that will replace the oldContent (the tool does data.replace(/oldContent/g, newContent);)",
+              "The text that will replace every occurrence of oldContent.",
           },
         },
         required: ["filePath", "oldContent", "newContent"],
