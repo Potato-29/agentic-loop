@@ -43,6 +43,8 @@ if (process.env.USE_SAFE_THINKING_VERBS === "1") {
     "pretending to think",
     "blowing my shit smoove off",
     "ignoring",
+    "day drinking",
+    "about to kms",
   ];
 }
 
@@ -69,6 +71,9 @@ const chatInterface = readline.createInterface({ input, output });
 
 while (true) {
   const userMsg = await chatInterface.question("You: ");
+  if (userMsg === "/exit") {
+    process.exit();
+  }
   messages.push({
     role: "user",
     content: userMsg,
