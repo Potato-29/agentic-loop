@@ -1,8 +1,8 @@
 <div align="center">
 
-https://github.com/Potato-29/agentic-loop/raw/main/assets/demo.mp4
+<video src="https://github.com/Potato-29/agentic-loop/raw/main/assets/demo.mp4" controls muted width="100%"></video>
 
-[▶ Watch the demo video](assets/demo.mp4)
+[Download the demo video](assets/demo.mp4)
 
 </div>
 
