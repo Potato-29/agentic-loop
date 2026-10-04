@@ -1,6 +1,6 @@
 <div align="center">
 
-<video src="https://github.com/Potato-29/agentic-loop/raw/main/assets/demo.mp4" controls muted width="100%"></video>
+<video src="https://github.com/user-attachments/assets/2fcec35c-135f-47f3-bb53-2acec7a1bc3b" controls muted width="100%"></video>
 
 [Download the demo video](assets/demo.mp4)
 
