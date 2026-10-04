@@ -3,8 +3,11 @@ import "dotenv/config";
 import * as readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import ora from "ora";
+import { marked } from "marked";
+import { markedTerminal } from "marked-terminal";
 
 import { available_tools, tool_implementations } from "./tools.js";
+import { renderLabel, renderResponse, renderToolInfo } from "./ui.js";
 
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen3:8b";
 const STREAM_RESPONSE = true;
@@ -44,6 +47,8 @@ const spinner_colors = [
 ];
 
 let spinner_verbs = [];
+
+marked.use(markedTerminal());
 
 if (process.env.USE_SAFE_THINKING_VERBS === "1") {
   spinner_verbs = [
@@ -90,7 +95,7 @@ const startSpinner = () => {
 const chatInterface = readline.createInterface({ input, output });
 
 while (true) {
-  const userMsg = await chatInterface.question("You: ");
+  const userMsg = await chatInterface.question(renderLabel({ text: "You: " }));
   if (userMsg === "/exit") {
     process.exit();
   }
@@ -126,12 +131,15 @@ while (true) {
 
       const chunk = part.message?.content ?? "";
       if (chunk) {
-        hideSpinner();
+        // buffer only: boxen needs the full text to size the box
         assembled += chunk;
-        process.stdout.write(chunk);
       }
     }
     hideSpinner();
+
+    if (assembled.trim()) {
+      process.stdout.write("\n" + renderResponse(assembled) + "\n\n");
+    }
 
     const assistantMessage = {
       role: "assistant",
@@ -143,13 +151,14 @@ while (true) {
     messages.push(assistantMessage);
 
     if (!requested_tool_calls.length) {
-      process.stdout.write("\n");
       break;
     }
 
     for (const call of requested_tool_calls) {
       const tool_name = call?.function?.name;
-      process.stdout.write(`called tool: ${tool_name} \n`);
+      process.stdout.write(
+        renderLabel({ text: `\n used tool: ${tool_name} \n`, color: "green" }),
+      );
       const tool_arguments = call?.function?.arguments;
       const impl = tool_implementations[tool_name];
       if (!impl) {
