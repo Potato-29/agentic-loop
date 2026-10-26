@@ -1,5 +1,11 @@
 import * as fs from "node:fs/promises";
 import { isPathAllowed } from "./helpers.js";
+import { NodeSSH } from "node-ssh";
+import { spawn } from "node:child_process";
+import { Duplex } from "node:stream";
+
+const ssh = new NodeSSH();
+let proxy = null;
 
 const getTime = () => {
   const date = new Date().toTimeString();
@@ -110,6 +116,95 @@ const modifyFileContent = async ({ filePath, oldContent, newContent }) => {
   }
 };
 
+const sshToHost = async () => {
+  proxy = spawn("cloudflared", [
+    "access",
+    "ssh",
+    "--hostname",
+    process.env.SSH_HOST,
+  ]);
+
+  // Bridge cloudflared stdin/stdout into a duplex stream
+  const socket = new Duplex({
+    read() {},
+    write(chunk, encoding, callback) {
+      if (!proxy.stdin.write(chunk, encoding)) {
+        proxy.stdin.once("drain", callback);
+      } else {
+        callback();
+      }
+    },
+    final(callback) {
+      proxy.stdin.end(callback);
+    },
+  });
+
+  proxy.stdout.on("data", (chunk) => socket.push(chunk));
+  proxy.stdout.on("end", () => socket.push(null));
+  proxy.on("error", (err) => socket.destroy(err));
+
+  try {
+    await ssh.connect({
+      sock: socket,
+      username: process.env.SSH_USERNAME,
+      password: process.env.SSH_PASSWORD,
+    });
+
+    // console.log("SSH Connection Established!");
+
+    const result = await ssh.execCommand("uptime");
+    // console.log("STDOUT:", result.stdout);
+    // console.log("STDERR:", result.stderr);
+    return result.stdout;
+  } catch (error) {
+    return error;
+  }
+};
+
+const disposeSSH = async () => {
+  if (ssh.isConnected()) {
+    ssh.dispose();
+  }
+  if (proxy !== null) {
+    proxy.kill();
+    proxy = null;
+  }
+  return "ssh session closed";
+};
+
+const toggleService = async ({ service, action }) => {
+  if (!ssh.isConnected()) {
+    return "not connected - call ssh_to_host first";
+  }
+  if (action !== "start" && action !== "stop") {
+    return "action must be 'start' or 'stop'";
+  }
+  try {
+    const services = JSON.parse(
+      await fs.readFile(
+        "F:\\projs\\agentic-loop\\.agent_workspace\\services.json",
+        "utf8",
+      ),
+    );
+    const entry = services.find(
+      (s) =>
+        s.key?.toLowerCase() === String(service).toLowerCase() ||
+        s.label?.toLowerCase() === String(service).toLowerCase(),
+    );
+    if (!entry) {
+      return `unknown service '${service}'. known keys: ${services.map((s) => s.key).join(", ")}`;
+    }
+    const command = entry[action];
+    if (!command) {
+      return `service '${entry.key}' has no '${action}' command`;
+    }
+    const { stdout, stderr, code } = await ssh.execCommand(command);
+    return JSON.stringify({ ran: command, code, stdout, stderr });
+  } catch (error) {
+    return String(error);
+  }
+};
+
 // this is where the model can call the tool it knows from.
 export const tool_implementations = {
   get_time: getTime,
@@ -121,6 +216,9 @@ export const tool_implementations = {
   write_file: writeAFile,
   create_folder: createFolder,
   edit_file: modifyFileContent,
+  ssh_to_host: sshToHost,
+  dispose_ssh: disposeSSH,
+  toggle_service: toggleService,
 };
 
 export const available_tools = [
@@ -289,6 +387,55 @@ export const available_tools = [
           },
         },
         required: ["filePath", "oldContent", "newContent"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "ssh_to_host",
+      description:
+        "Used to ssh to the host. use whenever user mentions 'cyberdeck' or 'deck', because it's their home server.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "dispose_ssh",
+      description: "Used to kill/dispose of an ongoing ssh session.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "toggle_service",
+      description:
+        "Starts or stops a service on the cyberdeck host over the existing ssh connection (call ssh_to_host first). The start/stop command is looked up automatically from services.json - just pass the service name and the action.",
+      parameters: {
+        type: "object",
+        properties: {
+          service: {
+            type: "string",
+            description:
+              "The service's 'key' or 'label' as listed in services.json, e.g. 'sshd' or 'crond'.",
+          },
+          action: {
+            type: "string",
+            enum: ["start", "stop"],
+            description: "Whether to start or stop the service.",
+          },
+        },
+        required: ["service", "action"],
       },
     },
   },
